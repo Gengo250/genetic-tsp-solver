@@ -1,0 +1,6 @@
+/train_code_c
+
+/build
+compile_commands.json
+.cache
+.vscode

@@ -27,3 +27,7 @@ find_library(MATH_LIBRARY m)
 if(MATH_LIBRARY)
   target_link_libraries(genetic_tsp_solver PRIVATE ${MATH_LIBRARY})
 endif()
+
+# raylib (interface grafica)
+find_library(RAYLIB_LIBRARY raylib REQUIRED)
+target_link_libraries(genetic_tsp_solver PRIVATE ${RAYLIB_LIBRARY})

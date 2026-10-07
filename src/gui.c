@@ -1,5 +1,8 @@
 #include <stdlib.h>
 
+#include <stdio.h>
+#include <string.h>
+
 #include "raylib.h"
 
 #include "gui.h"
@@ -41,7 +44,8 @@ static bool radio(Vector2 position, const char *label, bool selected)
     const Vector2 center = {position.x + 9.0f, position.y + 9.0f};
 
     DrawCircleLines((int)center.x, (int)center.y, 9.0f, DARKGRAY);
-    if (selected) {
+    if (selected)
+    {
         DrawCircleV(center, 5.0f, MAROON);
     }
     DrawText(label, (int)(position.x + 26.0f), (int)position.y, 18, DARKGRAY);
@@ -53,7 +57,8 @@ static bool radio(Vector2 position, const char *label, bool selected)
 /* Converte as coordenadas matematicas dos pontos para a area de desenho. */
 static void draw_points(Rectangle area, const Point *points, int count)
 {
-    if (points == NULL || count <= 0) {
+    if (points == NULL || count <= 0)
+    {
         return;
     }
 
@@ -62,17 +67,24 @@ static void draw_points(Rectangle area, const Point *points, int count)
     double min_y = points[0].y;
     double max_y = points[0].y;
 
-    for (int i = 1; i < count; i++) {
-        if (points[i].x < min_x) min_x = points[i].x;
-        if (points[i].x > max_x) max_x = points[i].x;
-        if (points[i].y < min_y) min_y = points[i].y;
-        if (points[i].y > max_y) max_y = points[i].y;
+    for (int i = 1; i < count; i++)
+    {
+        if (points[i].x < min_x)
+            min_x = points[i].x;
+        if (points[i].x > max_x)
+            max_x = points[i].x;
+        if (points[i].y < min_y)
+            min_y = points[i].y;
+        if (points[i].y > max_y)
+            max_y = points[i].y;
     }
 
     double span_x = max_x - min_x;
     double span_y = max_y - min_y;
-    if (span_x < 1e-9) span_x = 1.0;
-    if (span_y < 1e-9) span_y = 1.0;
+    if (span_x < 1e-9)
+        span_x = 1.0;
+    if (span_y < 1e-9)
+        span_y = 1.0;
 
     const double padding = 45.0;
     const double scale_x = ((double)area.width - 2.0 * padding) / span_x;
@@ -84,7 +96,8 @@ static void draw_points(Rectangle area, const Point *points, int count)
     const double origin_x = (double)area.x + (double)area.width / 2.0;
     const double origin_y = (double)area.y + (double)area.height / 2.0;
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++)
+    {
         const float screen_x = (float)(origin_x + (points[i].x - center_x) * scale);
         const float screen_y = (float)(origin_y - (points[i].y - center_y) * scale);
 
@@ -96,7 +109,8 @@ static void draw_points(Rectangle area, const Point *points, int count)
 
 static Point *generate_points(int scenario, int count)
 {
-    if (scenario == SCENARIO_UNIFORM) {
+    if (scenario == SCENARIO_UNIFORM)
+    {
         return generate_uniform_points(count, UNIFORM_MIN, UNIFORM_MAX);
     }
     return generate_circle_points(count, CIRCLE_RADIUS);
@@ -110,14 +124,85 @@ void run_gui(void)
     SetTargetFPS(60);
 
     const Rectangle view_area = {260.0f, 70.0f, 680.0f, 540.0f};
+    const Rectangle count_box = {20.0f, 106.0f, 110.0f, 36.0f};
 
     int count = 20;
+    char count_text[4] = "20";
+    bool editing_count = false;
     int scenario = SCENARIO_UNIFORM;
 
     int point_count = count;
     Point *points = generate_points(scenario, count);
 
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose())
+    {
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            if (CheckCollisionPointRec(GetMousePosition(), count_box))
+            {
+                editing_count = true;
+            }
+            else if (editing_count)
+            {
+                editing_count = false;
+
+                int value = atoi(count_text);
+
+                if (value < MIN_POINTS)
+                    value = MIN_POINTS;
+                if (value > MAX_POINTS)
+                    value = MAX_POINTS;
+
+                count = value;
+                snprintf(count_text, sizeof(count_text), "%d", count);
+            }
+        }
+
+        if (editing_count)
+        {
+            int key = GetCharPressed();
+
+            while (key > 0)
+            {
+                if (key >= '0' && key <= '9')
+                {
+                    int length = (int)strlen(count_text);
+
+                    if (length < 3)
+                    {
+                        count_text[length] = (char)key;
+                        count_text[length + 1] = '\0';
+                    }
+                }
+
+                key = GetCharPressed();
+            }
+
+            if (IsKeyPressed(KEY_BACKSPACE))
+            {
+                int length = (int)strlen(count_text);
+
+                if (length > 0)
+                {
+                    count_text[length - 1] = '\0';
+                }
+            }
+
+            if (IsKeyPressed(KEY_ENTER))
+            {
+                int value = atoi(count_text);
+
+                if (value < MIN_POINTS)
+                    value = MIN_POINTS;
+                if (value > MAX_POINTS)
+                    value = MAX_POINTS;
+
+                count = value;
+                snprintf(count_text, sizeof(count_text), "%d", count);
+
+                editing_count = false;
+            }
+        }
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
@@ -126,34 +211,58 @@ void run_gui(void)
 
         DrawText("Quantidade de pontos:", 20, 80, 18, DARKGRAY);
 
-        const Rectangle count_box = {20.0f, 106.0f, 110.0f, 36.0f};
         DrawRectangleRec(count_box, WHITE);
-        DrawRectangleLinesEx(count_box, 1.0f, DARKGRAY);
-        DrawText(TextFormat("%d", count), 32, 115, 20, DARKGRAY);
+        DrawRectangleLinesEx(count_box,
+                             editing_count ? 2.0f : 1.0f,
+                             editing_count ? DARKBLUE : DARKGRAY);
+        DrawText(count_text, 32, 115, 20, DARKGRAY);
+
+        /* Cursor simples para indicar que o campo esta em edicao. */
+        if (editing_count)
+        {
+            DrawText("_", 32 + MeasureText(count_text, 20) + 2, 115, 20, DARKBLUE);
+        }
+
+        bool count_changed = false;
 
         if (button((Rectangle){140.0f, 106.0f, 42.0f, 36.0f}, "-", 20) ||
-            IsKeyPressed(KEY_DOWN)) {
+            IsKeyPressed(KEY_DOWN))
+        {
             count--;
+            count_changed = true;
         }
         if (button((Rectangle){190.0f, 106.0f, 42.0f, 36.0f}, "+", 20) ||
-            IsKeyPressed(KEY_UP)) {
+            IsKeyPressed(KEY_UP))
+        {
             count++;
+            count_changed = true;
         }
 
-        if (count < MIN_POINTS) count = MIN_POINTS;
-        if (count > MAX_POINTS) count = MAX_POINTS;
+        if (count < MIN_POINTS)
+            count = MIN_POINTS;
+        if (count > MAX_POINTS)
+            count = MAX_POINTS;
+
+        /* Mantem o texto do campo em sincronia com os botoes e as setas. */
+        if (count_changed)
+        {
+            snprintf(count_text, sizeof(count_text), "%d", count);
+        }
 
         DrawText(TextFormat("minimo: %d", MIN_POINTS), 20, 150, 14, GRAY);
 
         DrawText("Cenario:", 20, 185, 18, DARKGRAY);
-        if (radio((Vector2){20.0f, 215.0f}, "Uniforme", scenario == SCENARIO_UNIFORM)) {
+        if (radio((Vector2){20.0f, 215.0f}, "Uniforme", scenario == SCENARIO_UNIFORM))
+        {
             scenario = SCENARIO_UNIFORM;
         }
-        if (radio((Vector2){20.0f, 247.0f}, "Circulo", scenario == SCENARIO_CIRCLE)) {
+        if (radio((Vector2){20.0f, 247.0f}, "Circulo", scenario == SCENARIO_CIRCLE))
+        {
             scenario = SCENARIO_CIRCLE;
         }
 
-        if (button((Rectangle){20.0f, 295.0f, 212.0f, 42.0f}, "Gerar pontos", 20)) {
+        if (button((Rectangle){20.0f, 295.0f, 212.0f, 42.0f}, "Gerar pontos", 20))
+        {
             free(points);
             points = generate_points(scenario, count);
             point_count = count;

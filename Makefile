@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -std=c11 -Wall -Wextra -Iinclude
 LDFLAGS = -lraylib -lm
-SRC = src/main.c src/gui.c src/point_generator.c
+SRC = src/main.c src/gui.c src/point_generator.c src/genetic.c
 BIN = tsp
 
 all: $(BIN)

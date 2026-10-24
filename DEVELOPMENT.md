@@ -14,11 +14,11 @@ genetic-tsp-solver/
 │   ├── point_generator.h  # Assinaturas: gera pontos uniforme/circulo
 │   ├── individual.h       # Struct Individual (solucao candidata)
 │   ├── population.h       # Struct Population (geracao atual)
-│   ├── genetic.h          # [PROXIMO] Assinaturas do motor genetico
+│   ├── genetic.h          # Assinaturas do motor genetico
 │   └── gui.h              # Assinatura de run_gui()
 ├── src/
 │   ├── point_generator.c  # Implementacao dos geradores de pontos
-│   ├── genetic.c          # [PROXIMO] Motor do algoritmo genetico
+│   ├── genetic.c          # Motor do algoritmo genetico (operadores prontos)
 │   ├── gui.c              # Interface grafica (Raylib)
 │   └── main.c             # Entrada do programa
 └── DEVELOPMENT.md         # Este arquivo
@@ -86,7 +86,11 @@ explorar o espaço de soluções.
 ### Seleção por Torneio (k=3)
 Sorteia 3 indivíduos aleatórios; o de maior fitness vence.  
 **Vantagem sobre roleta:** não é dominado por um único indivíduo com fitness
-muito superior, mantendo pressão seletiva balanceada.
+muito superior, mantendo pressão seletiva balanceada.  
+Na implementação a comparação é feita direto pelo **menor `distance`** — como
+`fitness = 1 / distance`, o resultado é idêntico a comparar o maior fitness, e
+o torneio passa a funcionar mesmo que o campo `fitness` ainda não tenha sido
+preenchido.
 
 ### Crossover OX1 (Order Crossover)
 Preserva um segmento do Pai1 e preenche o restante com a ordem do Pai2,
@@ -128,24 +132,85 @@ mas ficam presas em ótimos locais) com qualidade de exploração.
 
 ### Etapa 1 — Motor Genético (console) 🔄 EM ANDAMENTO
 **Objetivo:** Implementar o AG completo sem GUI, com saída no terminal.  
-**Arquivos a criar:**
-- `include/genetic.h` — Assinaturas de todas as funções do AG
-- `src/genetic.c` — Implementação completa
+**Arquivos:**
+- `include/genetic.h` — Assinaturas do AG ✅ criado
+- `src/genetic.c` — Operadores genéticos (seleção, crossover, mutação) ✅ criados
+- `src/genetic.c` — População, avaliação de fitness e loop principal 🔲 pendentes
 
 **Funções planejadas:**
 
-| Função | Responsabilidade |
-|--------|-----------------|
-| `population_create()` | Aloca Population e N Individuals com rotas embaralhadas |
-| `population_free()` | Libera toda a memória da população |
-| `individual_evaluate()` | Calcula `distance` e `fitness` de um indivíduo |
-| `population_evaluate_all()` | Avalia todos os indivíduos da população |
-| `population_best()` | Retorna ponteiro para o indivíduo com maior fitness |
-| `tournament_select()` | Seleciona um pai via torneio (k=3) |
-| `crossover_ox1()` | Gera um filho via Order Crossover entre dois pais |
-| `mutate_inversion()` | Aplica mutação por inversão com probabilidade p |
-| `population_next_gen()` | Gera a próxima geração completa (elitismo + crossover + mutação) |
-| `ga_run()` | Loop principal do AG com critério de parada duplo |
+| Função | Responsabilidade | Status |
+|--------|-----------------|--------|
+| `tournament_select()` | Seleciona um pai via torneio (k=3) | ✅ |
+| `order_crossover()` | Gera um filho via Order Crossover (OX1) entre dois pais | ✅ |
+| `inversion_mutation()` | Aplica mutação por inversão com probabilidade p | ✅ |
+| `route_is_valid()` | Checagem defensiva: a rota é permutação de 0..N-1? | ✅ |
+| `population_create()` | Aloca Population e N Individuals com rotas embaralhadas | 🔲 |
+| `population_free()` | Libera toda a memória da população | 🔲 |
+| `individual_evaluate()` | Calcula `distance` e `fitness` de um indivíduo | 🔲 |
+| `population_evaluate_all()` | Avalia todos os indivíduos da população | 🔲 |
+| `population_best()` | Retorna ponteiro para o indivíduo com maior fitness | 🔲 |
+| `population_next_gen()` | Gera a próxima geração completa (elitismo + crossover + mutação) | 🔲 |
+| `ga_run()` | Loop principal do AG com critério de parada duplo | 🔲 |
+
+#### Operadores genéticos entregues (Pessoa 1)
+
+Assinaturas em `include/genetic.h`:
+
+```c
+const Individual *tournament_select(const Population *population, int tournament_size);
+void order_crossover(const int *parent_a, const int *parent_b, int *child, int num_points);
+void inversion_mutation(int *route, int num_points, double rate);
+int  route_is_valid(const int *route, int num_points);
+```
+
+**`tournament_select()`** — sorteia `tournament_size` indivíduos com reposição e
+devolve o de menor `distance` (caminho mais curto vence). Exige população já
+avaliada. `tournament_size` é ajustado para `[1, population->size]`, então valor
+0, negativo ou maior que a população não estoura índice. Retorna `NULL` para
+população inválida/vazia; o ponteiro aponta para dentro da população e não deve
+ser liberado.
+
+**`order_crossover()`** — OX1 em três passos:
+1. Sorteia `start <= end` em `[0, num_points-1]` e copia `parent_a[start..end]`
+   para a mesma posição do filho.
+2. Varre `parent_b` de forma circular a partir de `end + 1`, escrevendo também
+   circularmente a partir de `end + 1`, pulando genes já usados.
+3. Rede de segurança: se o pai B vier corrompido (gene fora de
+   `[0, num_points)` ou repetido), as posições que sobraram são fechadas com os
+   genes ainda não usados.
+
+A tabela auxiliar `used[gene]` é indexada pelo próprio gene — como o gene é o
+índice do ponto, a checagem de repetição é O(1) em vez de varrer o filho a cada
+inserção, deixando o crossover em O(N). O filho é **sempre** uma permutação
+válida: sem cidade repetida, sem cidade faltando e sem índice fora de
+`num_points`.
+
+**`inversion_mutation()`** — com probabilidade `rate` sorteia dois índices em
+`[0, num_points-1]`, ordena o par e inverte o sub-vetor entre eles. Por só
+reordenar genes existentes, a rota continua sendo permutação válida por
+construção. `num_points < 2`, `rate <= 0.0` e ponteiro `NULL` são no-ops.
+
+**Controle de limites:** todo sorteio de índice passa pelo helper interno
+`random_range(min, max)` (intervalo fechado, com `max <= min` devolvendo `min`),
+que é o único ponto do módulo que gera índices. Isso concentra a garantia de que
+nenhum índice escapa de `[0, num_points-1]`.
+
+**Verificação executada** (harness fora do repo, `gcc -Wall -Wextra`, limpo sob
+ASan/UBSan — 29 verificações, 0 falhas):
+
+| Verificação | Resultado |
+|-------------|-----------|
+| OX1: n=2..16, 1500 pares cada → filho é permutação válida | 0 inválidos |
+| OX1: filho sempre explicável por algum corte `(s,e)` da semântica OX1 | 0 divergências |
+| OX1: pais idênticos devolvem cópia exata do pai | 0 divergências |
+| OX1: pai B com gene fora dos limites, negativo e duplicado | 0 filhos inválidos |
+| Mutação: `rate = 0.0` nunca altera / `rate = 1.0` altera 19008/20000 | ok |
+| Mutação: resultado é sempre o original com um único bloco contíguo invertido | 0 violações |
+| Mutação: taxa observada com `MUTATION_RATE = 0.05` | 0.0472 |
+| Torneio k=3: P(melhor vencer) teórico 0.271 / P(pior) 0.001 | 0.2712 / 0.0012 |
+| Torneio: frequência de vitória decresce com a distância (monotonia) | ok |
+| Torneio: k=1 vira sorteio uniforme; k > população é ajustado | ok |
 
 ---
 

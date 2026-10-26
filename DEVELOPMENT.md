@@ -44,8 +44,8 @@ Gerar Mapa (N pontos)
 [3] Nova Geracao  <─────────────────────────────────┐
     ├─ Elitismo: melhor individuo copiado direto     |
     ├─ Selecao por Torneio (k=3) → Pai1, Pai2       |
-    ├─ Crossover OX1 → Filho                        |
-    └─ Mutacao por Inversao (taxa 5%) → Filho final  |
+    ├─ Crossover OX1 (probabilidade adaptativa)      |
+    └─ Mutacao por Inversao (probabilidade adaptativa)|
         |                                            |
         v                                            |
 [4] Criterio de Parada?                             |
@@ -54,8 +54,8 @@ Gerar Mapa (N pontos)
 ```
 
 **Criterio de parada (duplo):**
-- Maximo de épocas atingido (ex: 2000), **OU**
-- Melhor distancia nao melhora por 100 epocas consecutivas (estagnacao)
+- Maximo de 1000 épocas atingido, **OU**
+- Melhor distancia nao melhora por 50 epocas consecutivas (estagnacao)
 
 ---
 
@@ -103,10 +103,20 @@ Inverte um subsegmento aleatório da rota.
 geométrico que sempre indica sub-otimalidade), sendo altamente eficiente
 para TSP.
 
-### Taxa de Mutação
-Taxa de **5% (0.05)** por indivíduo gerado.  
-- Baixa o suficiente para não destruir boas soluções encontradas pelo crossover  
-- Alta o suficiente para manter diversidade e escapar de ótimos locais
+### Probabilidades de Crossover e Mutação
+As probabilidades sao recalculadas linearmente a cada geracao, com
+`t = geracao / max_geracoes` limitado ao intervalo `[0, 1]`:
+
+```text
+Pc(t) = 0.80 + (0.95 - 0.80) * t
+Pm(t) = 0.10 + (0.02 - 0.10) * t
+```
+
+`Pc` e a chance de aplicar OX1 ao filho; caso contrario, o primeiro pai e
+copiado. `Pm` e a chance de aplicar inversao ao filho resultante. A exploracao
+comeca mais alta (10% de mutacao) e diminui gradualmente para 2%, enquanto a
+probabilidade de recombinacao cresce de 80% para 95%, favorecendo refinamento
+ao longo da busca. O melhor individuo e copiado sem alteracao (elitismo).
 
 ### Tamanho da População
 **100 indivíduos** por geração.  
@@ -130,12 +140,12 @@ mas ficam presas em ótimos locais) com qualidade de exploração.
 
 
 
-### Etapa 1 — Motor Genético (console) 🔄 EM ANDAMENTO
+### Etapa 1 — Motor Genético (console) ✅
 **Objetivo:** Implementar o AG completo sem GUI, com saída no terminal.  
 **Arquivos:**
-- `include/genetic.h` — Assinaturas do AG ✅ criado
-- `src/genetic.c` — Operadores genéticos (seleção, crossover, mutação) ✅ criados
-- `src/genetic.c` — População, avaliação de fitness e loop principal 🔲 pendentes
+- `include/genetic.h` — Assinaturas, parâmetros e taxas ✅
+- `src/genetic.c` — Operadores, população, avaliação e evolução ✅
+- `src/main.c` — Laço de épocas, relatório e medição de convergência (`--benchmark`) ✅
 
 **Funções planejadas:**
 
@@ -145,13 +155,11 @@ mas ficam presas em ótimos locais) com qualidade de exploração.
 | `order_crossover()` | Gera um filho via Order Crossover (OX1) entre dois pais | ✅ |
 | `inversion_mutation()` | Aplica mutação por inversão com probabilidade p | ✅ |
 | `route_is_valid()` | Checagem defensiva: a rota é permutação de 0..N-1? | ✅ |
-| `population_create()` | Aloca Population e N Individuals com rotas embaralhadas | 🔲 |
-| `population_free()` | Libera toda a memória da população | 🔲 |
-| `individual_evaluate()` | Calcula `distance` e `fitness` de um indivíduo | 🔲 |
-| `population_evaluate_all()` | Avalia todos os indivíduos da população | 🔲 |
-| `population_best()` | Retorna ponteiro para o indivíduo com maior fitness | 🔲 |
-| `population_next_gen()` | Gera a próxima geração completa (elitismo + crossover + mutação) | 🔲 |
-| `ga_run()` | Loop principal do AG com critério de parada duplo | 🔲 |
+| `population_create()` / `population_free()` | Aloca, embaralha e libera população | ✅ |
+| `evaluate_population()` | Calcula distância euclidiana e fitness | ✅ |
+| `population_best()` | Retorna o indivíduo de menor distância | ✅ |
+| `evolve_population()` | Gera a próxima geração (elitismo, torneio, OX1 e mutação) | ✅ |
+| `main --benchmark` | Executa épocas, mostra rota/desempenho e mede convergência | ✅ |
 
 #### Operadores genéticos entregues (Pessoa 1)
 
@@ -231,12 +239,17 @@ com tabela de distância por época para apresentação.
 | Parâmetro | Valor | Justificativa |
 |-----------|-------|---------------|
 | Tamanho da população | 100 | Balanceia diversidade e velocidade |
-| Taxa de mutação | 5% | Explora sem destruir crossover |
+| Crossover | 80% → 95% | Aumenta linearmente com as épocas |
+| Mutação | 10% → 2% | Diminui linearmente com as épocas |
 | Tamanho do torneio | 3 | Pressão seletiva moderada |
-| Max épocas | 2000 | Limite superior de tempo |
-| Estagnação | 100 épocas | Critério de parada antecipada |
+| Máximo de épocas | 1000 | Limite superior da execução |
+| Estagnação | 50 épocas | Critério de parada antecipada |
 | Elitismo | 1 indivíduo | Garante monotonia (melhor nunca piora) |
 | Min pontos | 8 | Requisito do enunciado |
+
+O modo `--benchmark` executa ambos os cenarios com 20 pontos e semente fixa
+para reproducibilidade. Imprime a melhor distancia, a rota, as taxas usadas e o
+tempo acumulado em cada epoca; ao final, registra epoca e tempo de convergencia.
 
 ---
 

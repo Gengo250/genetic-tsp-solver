@@ -2,11 +2,37 @@
 #define GENETIC_H
 
 #include "individual.h"
+#include "point.h"
 #include "population.h"
 
 /* Parametros do motor genetico (justificativa em DEVELOPMENT.md). */
 #define TOURNAMENT_SIZE 3
-#define MUTATION_RATE 0.05
+#define POPULATION_SIZE 100
+#define MAX_GENERATIONS 1000
+#define STAGNATION_LIMIT 50
+#define ELITISM_COUNT 1
+
+#define CROSSOVER_RATE_INITIAL 0.80
+#define CROSSOVER_RATE_FINAL 0.95
+#define MUTATION_RATE_INITIAL 0.10
+#define MUTATION_RATE_FINAL 0.02
+
+double crossover_rate_for_generation(int generation, int max_generations);
+double mutation_rate_for_generation(int generation, int max_generations);
+
+/* Cria uma populacao com rotas aleatorias e libera toda a memoria associada. */
+Population *population_create(int population_size, int num_points);
+void population_free(Population *population);
+
+/* Avalia rotas como ciclos usando os pontos indexados por cada gene. */
+int evaluate_population(Population *population, const Point *points, int num_points);
+
+/* Retorna o individuo de menor distancia, ou NULL para populacao invalida. */
+const Individual *population_best(const Population *population);
+
+/* Cria e avalia a proxima geracao a partir de uma populacao ja avaliada. */
+Population *evolve_population(const Population *current, const Point *points,
+                              int num_points, int generation, int max_generations);
 
 /* Selecao por torneio.
    Sorteia `tournament_size` individuos ao acaso (com reposicao) e devolve o que

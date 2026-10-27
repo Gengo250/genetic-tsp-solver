@@ -2,12 +2,26 @@
 #define POPULATION_H
 
 #include "individual.h"
-/* path = caminho feito por um indiviuo de uma população para chegar em um ponto
-   size =  tamanho total do caminho que um indivuo representa para chegar em um ponto*/
+#include "point.h"
+
 typedef struct {
     Individual *path;
     int size;
-
+    int num_points;
+    int *route_block;
 } Population;
 
-#endif 
+Population *population_create(int pop_size, int num_points);
+void population_free(Population *pop);
+
+double route_distance(const int *route, const Point *points, int num_points);
+void individual_evaluate(Individual *ind, const Point *points, int num_points);
+void population_evaluate_all(Population *pop, const Point *points);
+
+/* Returns 1 on success, 0 when the population or its routes are invalid. */
+int evaluate_population(Population *pop, const Point *points, int num_points);
+
+const Individual *population_best(const Population *pop);
+void individual_copy(Individual *dst, const Individual *src, int num_points);
+
+#endif /* POPULATION_H */

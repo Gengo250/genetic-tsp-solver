@@ -1,9 +1,6 @@
 #include <stdlib.h>
 
 #include "genetic.h"
-#include "individual.h"
-#include "population.h"
-
 /* Sorteia um inteiro no intervalo fechado [min, max].
    Centraliza o controle de limites: nenhum indice gerado aqui escapa do
    intervalo pedido, mesmo quando min e max chegam invertidos ou iguais. */
@@ -55,6 +52,39 @@ const Individual *tournament_select(const Population *population, int tournament
     }
 
     return best;
+}
+
+static double rate_for_generation(int current_generation, int max_generations,
+                                  double initial_rate, double final_rate)
+{
+    if (max_generations <= 0)
+    {
+        return final_rate;
+    }
+
+    if (current_generation <= 0)
+    {
+        return initial_rate;
+    }
+    if (current_generation >= max_generations)
+    {
+        return final_rate;
+    }
+
+    const double progress = (double)current_generation / (double)max_generations;
+    return initial_rate + progress * (final_rate - initial_rate);
+}
+
+double crossover_rate_for_generation(int current_generation, int max_generations)
+{
+    return rate_for_generation(current_generation, max_generations,
+                               CROSSOVER_RATE_INITIAL, CROSSOVER_RATE_FINAL);
+}
+
+double mutation_rate_for_generation(int current_generation, int max_generations)
+{
+    return rate_for_generation(current_generation, max_generations,
+                               MUTATION_RATE_INITIAL, MUTATION_RATE_FINAL);
 }
 
 void order_crossover(const int *parent_a, const int *parent_b, int *child, int num_points)
@@ -139,6 +169,78 @@ void order_crossover(const int *parent_a, const int *parent_b, int *child, int n
     free(used);
 }
 
+Population *evolve_population(const Population *current_pop, const Point *points,
+                              int num_points, int current_generation, int max_generations)
+{
+    if (current_pop == NULL || current_pop->path == NULL || current_pop->size < 1 ||
+        points == NULL || num_points < 1 || current_pop->num_points != num_points)
+    {
+        return NULL;
+    }
+
+    Population *next_pop = population_create(current_pop->size, num_points);
+    if (next_pop == NULL)
+    {
+        return NULL;
+    }
+
+    const Individual *best = population_best(current_pop);
+    if (best == NULL || best->route == NULL)
+    {
+        population_free(next_pop);
+        return NULL;
+    }
+
+    int elite_count = ELITISM_COUNT;
+    if (elite_count > next_pop->size)
+    {
+        elite_count = next_pop->size;
+    }
+    for (int i = 0; i < elite_count; i++)
+    {
+        individual_copy(&next_pop->path[i], best, num_points);
+    }
+
+    const double crossover_rate =
+        crossover_rate_for_generation(current_generation, max_generations);
+    const double mutation_rate =
+        mutation_rate_for_generation(current_generation, max_generations);
+
+    for (int i = elite_count; i < next_pop->size; i++)
+    {
+        const Individual *parent_a = tournament_select(current_pop, TOURNAMENT_SIZE);
+        const Individual *parent_b = tournament_select(current_pop, TOURNAMENT_SIZE);
+        if (parent_a == NULL || parent_b == NULL ||
+            parent_a->route == NULL || parent_b->route == NULL)
+        {
+            population_free(next_pop);
+            return NULL;
+        }
+
+        if (random_unit() < crossover_rate)
+        {
+            order_crossover(parent_a->route, parent_b->route,
+                            next_pop->path[i].route, num_points);
+        }
+        else
+        {
+            for (int point = 0; point < num_points; point++)
+            {
+                next_pop->path[i].route[point] = parent_a->route[point];
+            }
+        }
+        inversion_mutation(next_pop->path[i].route, num_points, mutation_rate);
+    }
+
+    if (!evaluate_population(next_pop, points, num_points))
+    {
+        population_free(next_pop);
+        return NULL;
+    }
+
+    return next_pop;
+}
+
 void inversion_mutation(int *route, int num_points, double rate)
 {
     if (route == NULL || num_points < 2 || rate <= 0.0)
@@ -146,7 +248,7 @@ void inversion_mutation(int *route, int num_points, double rate)
         return;
     }
 
-    if (random_unit() >= rate)
+    if (rate < 1.0 && random_unit() >= rate)
     {
         return;
     }

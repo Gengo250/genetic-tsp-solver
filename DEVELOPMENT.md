@@ -13,14 +13,17 @@ genetic-tsp-solver/
 │   ├── point.h            # Struct Point (coordenada 2D)
 │   ├── point_generator.h  # Assinaturas: gera pontos uniforme/circulo
 │   ├── individual.h       # Struct Individual (solucao candidata)
-│   ├── population.h       # Struct Population (geracao atual)
+│   ├── population.h       # Struct Population + criacao, memoria e avaliacao
 │   ├── genetic.h          # Assinaturas do motor genetico
 │   └── gui.h              # Assinatura de run_gui()
 ├── src/
 │   ├── point_generator.c  # Implementacao dos geradores de pontos
+│   ├── population.c       # Populacao (bloco unico), Fisher-Yates e avaliacao
 │   ├── genetic.c          # Motor do algoritmo genetico (operadores prontos)
 │   ├── gui.c              # Interface grafica (Raylib)
 │   └── main.c             # Entrada do programa
+├── tests/
+│   └── test_population.c  # Testes da Pessoa 2 (make test, ASan + UBSan)
 └── DEVELOPMENT.md         # Este arquivo
 ```
 
@@ -122,7 +125,7 @@ mas ficam presas em ótimos locais) com qualidade de exploração.
 **Arquivos criados:**
 - `include/point.h` — Struct `Point {id, x, y}`
 - `include/individual.h` — Struct `Individual {route, distance, fitness}`
-- `include/population.h` — Struct `Population {individuals, size}`
+- `include/population.h` — Struct `Population {path, size, num_points}`
 - `include/point_generator.h` — Assinaturas dos geradores
 - `src/point_generator.c` — Implementação dos geradores
 - `src/gui.c` + `include/gui.h` — Interface gráfica Raylib
@@ -135,7 +138,8 @@ mas ficam presas em ótimos locais) com qualidade de exploração.
 **Arquivos:**
 - `include/genetic.h` — Assinaturas do AG ✅ criado
 - `src/genetic.c` — Operadores genéticos (seleção, crossover, mutação) ✅ criados
-- `src/genetic.c` — População, avaliação de fitness e loop principal 🔲 pendentes
+- `include/population.h` + `src/population.c` — População, memória e avaliação de fitness ✅ criados
+- Loop principal (próxima geração + critério de parada) 🔲 pendente
 
 **Funções planejadas:**
 
@@ -145,11 +149,13 @@ mas ficam presas em ótimos locais) com qualidade de exploração.
 | `order_crossover()` | Gera um filho via Order Crossover (OX1) entre dois pais | ✅ |
 | `inversion_mutation()` | Aplica mutação por inversão com probabilidade p | ✅ |
 | `route_is_valid()` | Checagem defensiva: a rota é permutação de 0..N-1? | ✅ |
-| `population_create()` | Aloca Population e N Individuals com rotas embaralhadas | 🔲 |
-| `population_free()` | Libera toda a memória da população | 🔲 |
-| `individual_evaluate()` | Calcula `distance` e `fitness` de um indivíduo | 🔲 |
-| `population_evaluate_all()` | Avalia todos os indivíduos da população | 🔲 |
-| `population_best()` | Retorna ponteiro para o indivíduo com maior fitness | 🔲 |
+| `population_create()` | Aloca Population e P Individuals com rotas embaralhadas | ✅ |
+| `population_free()` | Libera toda a memória da população | ✅ |
+| `route_distance()` | Distância do ciclo, incluindo a aresta de volta | ✅ |
+| `individual_evaluate()` | Calcula `distance` e `fitness` de um indivíduo | ✅ |
+| `population_evaluate_all()` | Avalia todos os indivíduos da população | ✅ |
+| `population_best()` | Retorna ponteiro para o indivíduo de menor `distance` (= maior fitness) | ✅ |
+| `individual_copy()` | Cópia profunda de um indivíduo (para o elitismo) | ✅ |
 | `population_next_gen()` | Gera a próxima geração completa (elitismo + crossover + mutação) | 🔲 |
 | `ga_run()` | Loop principal do AG com critério de parada duplo | 🔲 |
 
@@ -212,6 +218,135 @@ ASan/UBSan — 29 verificações, 0 falhas):
 | Torneio: frequência de vitória decresce com a distância (monotonia) | ok |
 | Torneio: k=1 vira sorteio uniforme; k > população é ajustado | ok |
 
+#### Ambiente, memória e avaliação entregues (Pessoa 2)
+
+Assinaturas em `include/population.h`:
+
+```c
+typedef struct {
+    Individual *path;      /* vetor com os `size` individuos */
+    int size;              /* quantidade de individuos */
+    int num_points;        /* pontos do mapa = tamanho de cada rota (NOVO) */
+    int *route_block;      /* inicio do bloco de rotas; unico ponteiro que deve ser liberado (NOVO) */
+} Population;
+
+Population *population_create(int pop_size, int num_points);
+void        population_free(Population *pop);
+double      route_distance(const int *route, const Point *points, int num_points);
+void        individual_evaluate(Individual *ind, const Point *points, int num_points);
+void        population_evaluate_all(Population *pop, const Point *points);
+const Individual *population_best(const Population *pop);
+void        individual_copy(Individual *dst, const Individual *src, int num_points);
+```
+
+**`population_create()`** — valida `pop_size >= 1` e `num_points >= 1`, aloca a
+população e preenche cada rota com `0..N-1` embaralhada por Fisher-Yates.
+`distance` e `fitness` começam em 0. **Não chama `srand`**: a semente é
+decidida por quem chama (main/GUI), o que permite execuções reproduzíveis.
+Retorna `NULL` se a entrada for inválida ou faltar memória, sem vazar nada.
+
+**`population_free()`** — libera `route_block`, depois `path`, depois a struct.
+`population_free(NULL)` é no-op. O bloco é liberado pelo ponteiro guardado em
+`route_block`, e **não** por `path[0].route`. Depois de um `qsort` em `path`,
+o `path[0]` aponta para o meio do bloco, e `free` nesse endereço é
+comportamento indefinido (o ASan acusa *bad-free*).
+
+**`route_distance()`** — soma `hypot(dx, dy)` entre pontos consecutivos **e a
+aresta de volta `route[N-1] → route[0]`**, porque o caminho do caixeiro é um
+ciclo. `N < 2` retorna 0. Os pontos são indexados por `points[route[i]]`,
+assumindo `points[k].id == k` (garantido pelos geradores).
+
+**`individual_evaluate()`** — `distance = route_distance(...)` e
+`fitness = 1 / distance`. Se `distance < 1e-12` (N < 2 ou todos os pontos no
+mesmo lugar), usa `fitness = 0`: nesse caso toda rota tem o mesmo tamanho, e 0
+evita divisão por zero e valores infinitos em médias e gráficos.
+
+**`population_evaluate_all()`** — chama `individual_evaluate` para cada
+indivíduo, usando `pop->num_points`.
+
+**`population_best()`** — busca linear O(P) pelo **menor `distance`**, o mesmo
+critério do `tournament_select`. Retorna `NULL` para população inválida.
+
+**`individual_copy()`** — cópia **profunda**: `memcpy` do conteúdo da rota +
+`distance` + `fitness`. Nunca copia o ponteiro `route`. Se copiasse, dois
+indivíduos dividiriam a mesma memória (alterar um alteraria o outro) e o bloco
+seria liberado duas vezes (double free). Usada no elitismo (Pessoa 3).
+
+**Decisão: bloco único para as rotas.** A população faz só 3 alocações:
+
+```
+pop ──> Population { path, size, num_points, route_block }
+           │                                  │
+           v                                  │
+         path[0]  path[1]  path[2]  ...       │   (1 malloc: P Individuals)
+           │        │        │                │
+           v        v        v                v
+route_block: [ N ints | N ints | N ints | ... ]   (1 malloc: P*N ints)
+```
+
+Na criação, `path[i].route = route_block + i * num_points`. Motivos:
+- 3 mallocs e 3 frees em vez de P + 2;
+- se um malloc falhar, há no máximo 2 coisas para desfazer, então não existe
+  vazamento parcial de "metade das rotas";
+- os dados ficam contíguos na memória, aproveitando melhor o cache quando a
+  avaliação percorre a população inteira.
+
+> **A população pode ser reordenada com segurança.** Como o bloco é liberado
+> por `route_block`, a ordem do vetor `path` e os ponteiros `route` de cada
+> indivíduo podem mudar à vontade (ex.: `qsort` por `distance` para seleção
+> por Ranking, ou trocar `route` entre indivíduos). A única regra é que toda
+> rota continue apontando para dentro do bloco: nunca atribua a `route` memória
+> alocada por fora, e nunca chame `free` em um `route` individual.
+
+**Decisão: Fisher-Yates.** Para `i` de `N-1` até 1: `j = rand() % (i+1)` e troca
+`route[i]` com `route[j]`. A posição N-1 tem N escolhas, a N-2 tem N-1, …, a
+posição 1 tem 2 escolhas. São N! sequências de sorteio, cada uma gerando uma
+permutação diferente, ou seja, cada permutação sai com probabilidade exata 1/N!.
+"Sortear dois índices e trocar N vezes" tem N^(2N) sequências, que não é
+múltiplo de N! (N=3: 729 sequências para 6 permutações), então algumas
+permutações saem mais que outras.
+
+**Verificação executada** (`make test`: `tests/test_population.c`,
+`-std=c17 -Wall -Wextra` sem warnings, ASan + UBSan limpos, 38 verificações,
+0 falhas):
+
+| Verificação | Resultado |
+|-------------|-----------|
+| Rotas criadas passam em `route_is_valid` (N = 1, 2, 8, 50, 500; 100 rotas cada) | 0 inválidas |
+| Fisher-Yates, N=4, 240000 rotas: 24 permutações, esperado 10000 cada | 24 distintas, maior desvio 2.43% (9832 a 10243) |
+| Círculo R=100, rota `0..N-1` vs `2·N·R·sin(π/N)` (N = 8, 50, 500) | erro máx. 4.5e-13 (tolerância 1e-9) |
+| Quadrado unitário, rota 0,1,2,3 | 4.000000000000 |
+| Quadrado unitário, rota cruzada 0,2,1,3 | 4.828427124746 = 2 + 2√2 |
+| `individual_evaluate` no quadrado / distância zero | fitness 0.25 / fitness 0 |
+| `population_best` (200 indivíduos, N=30) | nenhum menor; coincide com o maior fitness |
+| `individual_copy`: ponteiros diferentes, alterar a cópia não altera o original | ok |
+| 1000 ciclos create/free + `population_free(NULL)` + entradas inválidas → `NULL` | ASan limpo |
+| Vazamento proposital (sem `population_free`) é acusado pelo LeakSanitizer | "236 bytes leaked in 3 allocation(s)" |
+| `qsort` de `path` por `distance` (100 indivíduos, N=25): rotas saem da ordem do bloco | ordenado; `population_best == &path[0]`; `population_free` limpo no ASan |
+| Mesmo cenário liberando via `path[0].route` (comportamento antigo) | ASan: *bad-free* ("attempting free on address which was not malloc()-ed") |
+| Integração: `tournament_select` sobre população avaliada (10000 torneios) | média dos vencedores 2387.27 < média da pop. 2612.79 |
+| Mini-AG de integração (torneio + OX1 + inversão + elitismo), círculo N=20, 500 gerações | 1840.07 → 625.74 (ótimo 625.74, gap 0.00%), o melhor nunca piora |
+
+> O ASan não linka no gcc MinGW do Windows. O `make test` foi executado no
+> WSL (Ubuntu 24.04, gcc 13.3).
+
+#### Função de aptidão (texto para o relatório)
+
+A aptidão de um indivíduo é definida como `fitness = 1 / distância`, em que a
+distância é o comprimento euclidiano total da rota. Como o objetivo do problema
+é **minimizar** a distância, a inversa transforma esse objetivo em uma
+**maximização**: quanto menor o caminho, maior a aptidão. Na prática, os
+operadores comparam os indivíduos diretamente pelo campo `distance` (vence o
+menor). Isso produz exatamente a mesma ordem que comparar o maior `fitness`,
+já que `1/x` é estritamente decrescente para `x > 0`, e ainda evita uma
+divisão. O cálculo da distância inclui a **aresta de retorno** do último ponto
+ao primeiro, pois o caminho do caixeiro é um ciclo fechado: sem ela estaríamos
+otimizando um caminho aberto, que é outro problema. Por fim, o cenário circular
+tem ótimo conhecido: com N pontos igualmente espaçados num círculo de raio R, o
+melhor ciclo é o perímetro do polígono regular, `2·N·R·sin(π/N)`. Isso permite
+medir o **gap** do AG em relação ao ótimo, `gap = (melhor_AG − ótimo) / ótimo`,
+e avaliar objetivamente a qualidade da solução encontrada.
+
 ---
 
 ### Etapa 2 — Integração com GUI 🔲 PENDENTE
@@ -248,4 +383,9 @@ mkdir -p build && cd build
 cmake ..
 make
 ./genetic_tsp_solver
+```
+
+```bash
+# Testes da populacao/avaliacao (sem Raylib, com ASan + UBSan; Linux/WSL)
+make test
 ```

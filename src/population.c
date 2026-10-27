@@ -122,6 +122,51 @@ void population_free(Population *pop)
     free(pop);
 }
 
+
+int evaluate_population(Population *pop, const Point *points, int num_points)
+{
+    if (pop == NULL || pop->path == NULL || points == NULL || pop->size <= 0 ||
+        num_points <= 0 || pop->num_points != num_points)
+    {
+        return 0;
+    }
+
+    char *seen = calloc((size_t)num_points, sizeof(*seen));
+    if (seen == NULL)
+    {
+        return 0;
+    }
+
+    for (int i = 0; i < pop->size; i++)
+    {
+        if (pop->path[i].route == NULL)
+        {
+            free(seen);
+            return 0;
+        }
+
+        memset(seen, 0, (size_t)num_points * sizeof(*seen));
+        for (int j = 0; j < num_points; j++)
+        {
+            const int point_index = pop->path[i].route[j];
+            if (point_index < 0 || point_index >= num_points || seen[point_index])
+            {
+                free(seen);
+                return 0;
+            }
+            seen[point_index] = 1;
+        }
+    }
+    free(seen);
+
+    for (int i = 0; i < pop->size; i++)
+    {
+        individual_evaluate(&pop->path[i], points, num_points);
+    }
+
+    return 1;
+}
+
 double route_distance(const int *route, const Point *points, int num_points)
 {
     if (route == NULL || points == NULL || num_points < 2)

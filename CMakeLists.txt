@@ -25,7 +25,7 @@ target_compile_options(genetic_tsp_solver PRIVATE -Wall -Wextra)
 # libm (math.h)
 find_library(MATH_LIBRARY m)
 if(MATH_LIBRARY)
-  target_link_libraries(genetic_tsp_solver PRIVATE ${MATH_LIBRARY})
+  target_link_libraries(genetic_tsp_solver PRIVATE raylib m pthread dl rt X11 GL Xrandr Xinerama Xi Xcursor)
 endif()
 
 # raylib (interface grafica)

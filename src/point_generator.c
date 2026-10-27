@@ -9,10 +9,14 @@
 #define TSP_PI 3.14159265358979323846
 
 Point *generate_uniform_points(int count, double min, double max) {
-
+  if (count <= 0) {
+    return NULL;
+  }
 
   Point *points = malloc((size_t)count * sizeof(Point));
-
+  if (points == NULL) {
+    return NULL;
+  }
 
   const double span = max - min;
   for (int i = 0; i < count; i++) {
@@ -25,8 +29,14 @@ Point *generate_uniform_points(int count, double min, double max) {
 }
 
 Point *generate_circle_points(int count, double radius) {
+  if (count <= 0) {
+    return NULL;
+  }
 
   Point *points = malloc((size_t)count * sizeof(Point));
+  if (points == NULL) {
+    return NULL;
+  }
 
   for (int i = 0; i < count; i++) {
     const double angle = 2.0 * TSP_PI * (double)i / (double)count;

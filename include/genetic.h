@@ -3,14 +3,32 @@
 
 #include "population.h"
 
-#define POPULATION_SIZE 100
-#define TOURNAMENT_SIZE 3
+/* Populacao: piso + uma fatia por ponto. Parametro fixo nao serve, porque o
+   espaco de busca cresce com N: com 100 individuos fixos o AG chega ao otimo
+   ate N=50 e empaca a partir de N=100. Use population_size_for(). */
+#define POPULATION_MIN 100
+#define POPULATION_PER_POINT 2
+
+#define TOURNAMENT_SIZE 7
 #define ELITISM_COUNT 1
+
+/* Taxas constantes. O decaimento ao longo da execucao foi medido e piora o
+   resultado nos dois operadores: ele reduz justamente a exploracao de que o
+   AG precisa quando N e grande. A interpolacao continua existindo em
+   rate_for_generation() para quem quiser reativar o decaimento. */
 #define CROSSOVER_RATE_INITIAL 1.0
-#define CROSSOVER_RATE_FINAL 0.75
-#define MUTATION_RATE_INITIAL 0.1
-#define MUTATION_RATE_FINAL 0.02
-#define MUTATION_RATE 0.05
+#define CROSSOVER_RATE_FINAL 1.0
+#define MUTATION_RATE_INITIAL 0.30
+#define MUTATION_RATE_FINAL 0.30
+#define MUTATION_RATE 0.30
+
+/* Criterio de parada duplo, compartilhado pelo console e pela GUI para que as
+   duas execucoes descrevam o mesmo algoritmo. A estagnacao tambem escala com
+   N: mapa maior precisa de mais paciencia antes de declarar convergencia. */
+#define STAGNATION_MIN 150
+#define STAGNATION_PER_POINT 2
+#define GENERATIONS_PER_POINT 20
+#define MIN_MAX_GENERATIONS 1000
 
 const Individual *tournament_select(const Population *population, int tournament_size);
 
@@ -20,6 +38,11 @@ int route_is_valid(const int *route, int num_points);
 
 double crossover_rate_for_generation(int current_generation, int max_generations);
 double mutation_rate_for_generation(int current_generation, int max_generations);
+
+/* Parametros que dependem do tamanho do mapa. */
+int population_size_for(int num_points);
+int stagnation_limit_for(int num_points);
+int max_generations_for(int num_points);
 Population *evolve_population(const Population *current_pop, const Point *points,
                               int num_points, int current_generation, int max_generations);
 

@@ -20,10 +20,13 @@ genetic-tsp-solver/
 │   ├── point_generator.c  # Implementacao dos geradores de pontos
 │   ├── population.c       # Populacao (bloco unico), Fisher-Yates e avaliacao
 │   ├── genetic.c          # Motor do algoritmo genetico (operadores prontos)
-│   ├── gui.c              # Interface grafica (Raylib)
-│   └── main.c             # Entrada do programa
+│   ├── gui.c              # Interface grafica (Raylib): AG rodando ao vivo
+│   └── main.c             # Entrada do programa (GUI sem args, console com args)
 ├── tests/
 │   └── test_population.c  # Testes da Pessoa 2 (make test, ASan + UBSan)
+├── resources/
+│   ├── DejaVuSans.ttf     # Fonte da interface (carregada em runtime)
+│   └── DejaVuSans-LICENSE.txt
 └── DEVELOPMENT.md         # Este arquivo
 ```
 
@@ -349,9 +352,48 @@ e avaliar objetivamente a qualidade da solução encontrada.
 
 ---
 
-### Etapa 2 — Integração com GUI 🔲 PENDENTE
+### Etapa 2 — Integração com GUI ✅
 **Objetivo:** Conectar o motor genético à interface Raylib para visualizar
 a evolução do caminho época a época.
+
+`src/gui.c` agora inclui `genetic.h` e `population.h` e roda o AG dentro do
+laço de desenho. O estado da execução vive num `Solver` local:
+
+```c
+typedef struct {
+    Population *population;
+    int generation;
+    int max_generations;
+    int stagnant;
+    double best_distance;
+    /* ... */
+} Solver;
+```
+
+A cada frame, se a evolução estiver ativa, o laço chama `solver_step()` de 1 a
+50 vezes (controle "Velocidade: N ger/frame") e depois desenha a rota do
+`population_best()` da geração atual. Como o elitismo garante que o melhor
+nunca piora, o indivíduo desenhado é também o melhor de toda a execução — não
+é preciso guardar uma cópia à parte.
+
+**Controles:** `Gerar pontos` (novo mapa, reinicia a evolução), `Iniciar` /
+`Pausar` / `Continuar` (também na barra de espaço), `Resetar` e os botões de
+velocidade. O painel esquerdo acompanha época, melhor distância, época em que
+o melhor apareceu, tempo decorrido, taxa de mutação atual e status. No cenário
+circular ele mostra também o ótimo `2·N·R·sin(π/N)` e o **gap** em tempo real.
+
+O critério de parada é o mesmo do modo console — por isso `STAGNATION_LIMIT`,
+`GENERATIONS_PER_POINT` e `MIN_MAX_GENERATIONS` saíram dos literais de
+`main.c` para `include/genetic.h`, com `max_generations_for()` em
+`src/genetic.c`. GUI e console descrevem o mesmo algoritmo.
+
+**Fonte:** a interface usa DejaVu Sans (`resources/DejaVuSans.ttf`, licença em
+`resources/DejaVuSans-LICENSE.txt`) carregada com `LoadFontEx` em 32 px e
+filtro bilinear, no lugar da fonte bitmap embutida do Raylib. O arquivo é
+procurado em `resources/`, `../resources/`, `../../resources/` e ao lado do
+executável; se nenhum existir, a fonte padrão do Raylib assume e a interface
+continua legível. O CMake copia `resources/` para junto do binário no
+`POST_BUILD`, então rodar de dentro de `build/` também funciona.
 
 ---
 
@@ -363,15 +405,21 @@ com tabela de distância por época para apresentação.
 
 ## Parâmetros do Algoritmo
 
+Valores conforme `include/genetic.h` e `src/main.c`:
+
 | Parâmetro | Valor | Justificativa |
 |-----------|-------|---------------|
-| Tamanho da população | 100 | Balanceia diversidade e velocidade |
-| Taxa de mutação | 5% | Explora sem destruir crossover |
-| Tamanho do torneio | 3 | Pressão seletiva moderada |
-| Max épocas | 2000 | Limite superior de tempo |
-| Estagnação | 100 épocas | Critério de parada antecipada |
-| Elitismo | 1 indivíduo | Garante monotonia (melhor nunca piora) |
+| Tamanho da população | 100 (`POPULATION_SIZE`) | Balanceia diversidade e velocidade |
+| Taxa de crossover | 1.00 → 0.75 ao longo da execução | Começa misturando sempre; no fim preserva mais os bons esquemas já encontrados |
+| Taxa de mutação | 10% → 2% ao longo da execução | Explora muito no início e refina no fim, sem destruir o crossover |
+| Tamanho do torneio | 3 (`TOURNAMENT_SIZE`) | Pressão seletiva moderada |
+| Max épocas | `max(N·20, 1000)` (`max_generations_for`) | Teto proporcional ao tamanho do espaço de busca, com piso para mapas pequenos |
+| Estagnação | 150 épocas (`STAGNATION_LIMIT`) | Critério de parada antecipada |
+| Elitismo | 1 indivíduo (`ELITISM_COUNT`) | Garante monotonia (melhor nunca piora) |
 | Min pontos | 8 | Requisito do enunciado |
+
+As taxas adaptativas são interpoladas linearmente pela fração
+`geração / max_épocas` em `rate_for_generation()` (`src/genetic.c`).
 
 ---
 
@@ -382,7 +430,22 @@ com tabela de distância por época para apresentação.
 mkdir -p build && cd build
 cmake ..
 make
+```
+
+**Modo grafico** (sem argumentos) — escolha os pontos e o cenario, clique em
+`Gerar pontos` e depois em `Iniciar` para ver a rota evoluindo:
+
+```bash
 ./genetic_tsp_solver
+```
+
+**Modo console** (com argumentos) — imprime o desempenho a cada `PRINT_EVERY`
+epocas, util para gerar a tabela do relatorio:
+
+```bash
+# <cenario: 1=uniforme, 2=circular> <N> <PRINT_EVERY>
+./genetic_tsp_solver 1 20 50     # uniforme, 20 pontos, log a cada 50 epocas
+./genetic_tsp_solver 2 50 100    # circular, 50 pontos, log a cada 100 epocas
 ```
 
 ```bash

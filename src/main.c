@@ -21,7 +21,9 @@ static void print_route(const int *route, int num_points)
 
 static int run_scenario(const char *name, const Point *points, int num_points, int print_every)
 {
-    Population *population = population_create(POPULATION_SIZE , num_points);
+    const int population_size = population_size_for(num_points);
+
+    Population *population = population_create(population_size, num_points);
     if (population == NULL)
     {
         fprintf(stderr, "Erro: nao foi possivel criar a populacao inicial.\n");
@@ -40,8 +42,8 @@ static int run_scenario(const char *name, const Point *points, int num_points, i
 
     // Controle de estagnacao e limites dinamicos
     int stagnant_generations = 0;
-    int stagnation_limit = 150;
-    int max_generations = (num_points * 20 > 1000) ? (num_points * 20) : 1000;
+    int stagnation_limit = stagnation_limit_for(num_points);
+    int max_generations = max_generations_for(num_points);
 
     // Registro exato da melhoria (Epoca e Tempo CPU)
     int best_generation = 0;
@@ -55,8 +57,8 @@ static int run_scenario(const char *name, const Point *points, int num_points, i
         return 0;
     }
 
-    printf("\n=== Cenario: %s | N=%d | Populacao=%d | Max Epocas=%d ===\n",
-           name, num_points, POPULATION_SIZE, max_generations);
+    printf("\n=== Cenario: %s | N=%d | Populacao=%d | Max Epocas=%d | Estagnacao=%d ===\n",
+           name, num_points, population_size, max_generations, stagnation_limit);
 
     int stopped_by_stagnation = 0;
     int current_generation;
@@ -181,8 +183,9 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    printf("Iniciando AG | Torneio k=%d | Elitismo=%d | Mutacao inicial=%.0f%%\n",
-           TOURNAMENT_SIZE, ELITISM_COUNT, MUTATION_RATE_INITIAL * 100.0);
+    printf("Iniciando AG | Torneio k=%d | Elitismo=%d | Mutacao=%.0f%% | Crossover=%.0f%%\n",
+           TOURNAMENT_SIZE, ELITISM_COUNT, MUTATION_RATE_INITIAL * 100.0,
+           CROSSOVER_RATE_INITIAL * 100.0);
 
     const int ok = run_scenario(nome_cenario, points, num_points, print_every);
 

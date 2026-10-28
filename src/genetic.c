@@ -87,6 +87,42 @@ double mutation_rate_for_generation(int current_generation, int max_generations)
                                MUTATION_RATE_INITIAL, MUTATION_RATE_FINAL);
 }
 
+/* Piso mais uma fatia por ponto. O piso serve aos mapas pequenos, onde o
+   termo proporcional seria baixo demais para formar diversidade. */
+static int floor_plus_share(int minimum, int per_point, int num_points)
+{
+    if (num_points < 1)
+    {
+        return minimum;
+    }
+
+    const int proportional = num_points * per_point;
+
+    return (proportional > minimum) ? proportional : minimum;
+}
+
+/* Populacao proporcional ao numero de pontos. Com populacao fixa o AG perde
+   diversidade antes de varrer o espaco: medido no benchmark circular, 100
+   individuos fixos dao gap de 67% em N=300, e 2*N da gap 0%. */
+int population_size_for(int num_points)
+{
+    return floor_plus_share(POPULATION_MIN, POPULATION_PER_POINT, num_points);
+}
+
+/* Paciencia antes de declarar convergencia. Mapa maior demora mais para dar o
+   proximo passo de melhora; cortar cedo congela uma rota ainda ruim. */
+int stagnation_limit_for(int num_points)
+{
+    return floor_plus_share(STAGNATION_MIN, STAGNATION_PER_POINT, num_points);
+}
+
+/* Teto de epocas proporcional ao tamanho do mapa: mais pontos, mais espaco de
+   busca. O piso evita que um mapa pequeno encerre antes de o AG trabalhar. */
+int max_generations_for(int num_points)
+{
+    return floor_plus_share(MIN_MAX_GENERATIONS, GENERATIONS_PER_POINT, num_points);
+}
+
 void order_crossover(const int *parent_a, const int *parent_b, int *child, int num_points)
 {
     if (parent_a == NULL || parent_b == NULL || child == NULL || num_points <= 0)

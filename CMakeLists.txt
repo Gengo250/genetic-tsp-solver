@@ -31,3 +31,10 @@ endif()
 # raylib (interface grafica)
 find_library(RAYLIB_LIBRARY raylib REQUIRED)
 target_link_libraries(genetic_tsp_solver PRIVATE ${RAYLIB_LIBRARY})
+
+# A GUI carrega a fonte em runtime, entao resources/ precisa existir ao lado do
+# binario quando ele e executado de dentro de build/.
+add_custom_command(TARGET genetic_tsp_solver POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          "${CMAKE_SOURCE_DIR}/resources"
+          "$<TARGET_FILE_DIR:genetic_tsp_solver>/resources")

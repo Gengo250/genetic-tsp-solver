@@ -78,8 +78,8 @@ static int run_scenario(const char *name, const Point *points, int num_points, i
         population = next;
         best = population_best(population);
 
-        // Registro de melhoria estrita
-        if (best->distance < best_distance)
+        // Registro de melhoria estrita 
+        if (best->distance < best_distance - 1e-9)
         {
             best_distance = best->distance;
             stagnant_generations = 0;
@@ -126,7 +126,7 @@ static int run_scenario(const char *name, const Point *points, int num_points, i
 
 int main(int argc, char **argv)
 {
-    // Suporte para o modo grafico padrao
+
     if (argc == 1)
     {
         run_gui();
@@ -134,9 +134,9 @@ int main(int argc, char **argv)
     }
 
     // Leitura via linha de comando
-    if (argc != 4)
+    if (argc != 4 && argc != 5)
     {
-        fprintf(stderr, "Uso: %s <cenario: 1=Uniforme, 2=Circular> <N> <PRINT_EVERY>\n", argv[0]);
+        fprintf(stderr, "Uso: %s <cenario: 1=Uniforme, 2=Circular> <N> <PRINT_EVERY> [semente]\n", argv[0]);
         fprintf(stderr, "Ou execute sem argumentos para abrir a interface GUI.\n");
         return EXIT_FAILURE;
     }
@@ -144,6 +144,24 @@ int main(int argc, char **argv)
     int cenario = atoi(argv[1]);
     int num_points = atoi(argv[2]);
     int print_every = atoi(argv[3]);
+
+    // Semente: argumento opcional; sem ele, usa o relogio. O valor usado e sempre
+    // impresso, entao qualquer execucao pode ser repetida depois.
+    unsigned int seed = (unsigned int)time(NULL);
+    if (argc == 5)
+    {
+        char *end = NULL;
+        const unsigned long parsed = strtoul(argv[4], &end, 10);
+        if (end == argv[4] || *end != '\0')
+        {
+            fprintf(stderr, "Erro: semente invalida '%s' (use um inteiro nao negativo).\n", argv[4]);
+            return EXIT_FAILURE;
+        }
+        seed = (unsigned int)parsed;
+    }
+
+    srand(seed); // unica chamada a srand: mapa e AG dependem so desta semente
+    printf("Semente utilizada: %u\n", seed);
 
     if (num_points < 8)
     {
@@ -155,8 +173,6 @@ int main(int argc, char **argv)
     {
         print_every = 1;
     }
-
-    srand((unsigned int)time(NULL));
 
     Point *points = NULL;
     const char *nome_cenario = "";

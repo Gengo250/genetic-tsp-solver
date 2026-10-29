@@ -6,10 +6,10 @@
 /* Populacao: piso + uma fatia por ponto. Parametro fixo nao serve, porque o
    espaco de busca cresce com N: com 100 individuos fixos o AG chega ao otimo
    ate N=50 e empaca a partir de N=100. Use population_size_for(). */
-#define POPULATION_MIN 100
+#define POPULATION_MIN 150
 #define POPULATION_PER_POINT 2
 
-#define TOURNAMENT_SIZE 7
+#define TOURNAMENT_SIZE 5
 #define ELITISM_COUNT 1
 
 /* Taxas constantes. O decaimento ao longo da execucao foi medido e piora o

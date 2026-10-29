@@ -9,13 +9,18 @@
 #define POPULATION_MIN 150
 #define POPULATION_PER_POINT 2
 
+/* k = 5: pressao seletiva moderada. k menor explora demais (quase aleatorio);
+   k maior explota demais e a populacao converge cedo. Elitismo 1: so o
+   melhor passa direto, o suficiente para nunca perder a melhor rota. */
 #define TOURNAMENT_SIZE 5
 #define ELITISM_COUNT 1
 
 /* Taxas constantes. O decaimento ao longo da execucao foi medido e piora o
    resultado nos dois operadores: ele reduz justamente a exploracao de que o
    AG precisa quando N e grande. A interpolacao continua existindo em
-   rate_for_generation() para quem quiser reativar o decaimento. */
+   rate_for_generation() para quem quiser reativar o decaimento.
+   Cruzamento 100%: o OX1 sempre gera rota valida e o elitismo ja guarda o
+   melhor. Mutacao 30%: alta para manter exploracao em mapas grandes. */
 #define CROSSOVER_RATE_INITIAL 1.0
 #define CROSSOVER_RATE_FINAL 1.0
 #define MUTATION_RATE_INITIAL 0.30
@@ -24,7 +29,8 @@
 
 /* Criterio de parada duplo, compartilhado pelo console e pela GUI para que as
    duas execucoes descrevam o mesmo algoritmo. A estagnacao tambem escala com
-   N: mapa maior precisa de mais paciencia antes de declarar convergencia. */
+   N: mapa maior precisa de mais paciencia antes de declarar convergencia.
+   Para com max(150, 2*N) epocas sem melhora OU no teto max(1000, 20*N). */
 #define STAGNATION_MIN 150
 #define STAGNATION_PER_POINT 2
 #define GENERATIONS_PER_POINT 20

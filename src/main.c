@@ -10,6 +10,8 @@
 #define UNIFORM_POINT_MAX 100.0
 #define CIRCLE_RADIUS 100.0
 
+/* Imprime a rota repetindo a cidade inicial no fim, para deixar claro que o
+   caminho e um ciclo fechado. */
 static void print_route(const int *route, int num_points)
 {
     for (int i = 0; i < num_points; i++)
@@ -19,6 +21,9 @@ static void print_route(const int *route, int num_points)
     printf(" -> %d", route[0]);
 }
 
+/* Executa o AG completo em um mapa: cria e avalia a populacao inicial e evolui
+   epoca a epoca ate estagnar ou bater o teto de epocas. Registra quando e em
+   quanto tempo de CPU a melhor rota apareceu. Devolve 1 em sucesso. */
 static int run_scenario(const char *name, const Point *points, int num_points, int print_every)
 {
     const int population_size = population_size_for(num_points);
@@ -74,11 +79,15 @@ static int run_scenario(const char *name, const Point *points, int num_points, i
             return 0;
         }
 
+        /* Geracional: a populacao antiga e descartada inteira (o elitismo ja
+           levou o melhor para `next`). */
         population_free(population);
         population = next;
         best = population_best(population);
 
-        // Registro de melhoria estrita 
+        // Registro de melhoria estrita
+        /* A folga 1e-9 ignora diferencas de arredondamento do double: so conta
+           como melhora uma rota realmente mais curta. */
         if (best->distance < best_distance - 1e-9)
         {
             best_distance = best->distance;
@@ -88,6 +97,7 @@ static int run_scenario(const char *name, const Point *points, int num_points, i
         }
         else
         {
+            /* Conta epocas sem melhora; ao chegar no limite, consideramos que convergiu. */
             stagnant_generations++;
         }
 
@@ -124,6 +134,8 @@ static int run_scenario(const char *name, const Point *points, int num_points, i
     return 1;
 }
 
+/* Sem argumentos abre a GUI; com argumentos roda no console, o que permite
+   repetir experimentos com a mesma semente. */
 int main(int argc, char **argv)
 {
 

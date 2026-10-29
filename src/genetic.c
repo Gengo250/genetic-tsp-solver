@@ -20,6 +20,9 @@ static double random_unit(void)
     return (double)rand() / ((double)RAND_MAX + 1.0);
 }
 
+/* Selecao por torneio: sorteia k individuos e devolve o de menor distancia.
+   Nao precisa ordenar a populacao, e o k controla a pressao seletiva
+   (exploracao x explotacao). Os sorteios sao com reposicao. */
 const Individual *tournament_select(const Population *population, int tournament_size)
 {
     if (population == NULL || population->path == NULL || population->size <= 0)
@@ -54,6 +57,8 @@ const Individual *tournament_select(const Population *population, int tournament
     return best;
 }
 
+/* Interpolacao linear da taxa entre o valor inicial e o final conforme a
+   epoca avanca. Hoje inicial == final (ver genetic.h), entao a taxa e fixa. */
 static double rate_for_generation(int current_generation, int max_generations,
                                   double initial_rate, double final_rate)
 {
@@ -123,6 +128,9 @@ int max_generations_for(int num_points)
     return floor_plus_share(MIN_MAX_GENERATIONS, GENERATIONS_PER_POINT, num_points);
 }
 
+/* OX1: copia um trecho do pai A e completa com a ordem do pai B, pulando
+   repetidos. Garante que o filho seja sempre uma rota valida (cada cidade
+   uma vez), o que um cruzamento de um ponto comum nao garantiria. */
 void order_crossover(const int *parent_a, const int *parent_b, int *child, int num_points)
 {
     if (parent_a == NULL || parent_b == NULL || child == NULL || num_points <= 0)
@@ -205,6 +213,9 @@ void order_crossover(const int *parent_a, const int *parent_b, int *child, int n
     free(used);
 }
 
+/* Uma epoca do AG: elitismo, depois torneio -> cruzamento -> mutacao ate
+   encher a nova populacao, que e avaliada no final. Cria uma populacao nova
+   em vez de alterar a atual para que os pais nao mudem durante a selecao. */
 Population *evolve_population(const Population *current_pop, const Point *points,
                               int num_points, int current_generation, int max_generations)
 {
@@ -227,6 +238,7 @@ Population *evolve_population(const Population *current_pop, const Point *points
         return NULL;
     }
 
+    /* Elitismo: o melhor entra intacto, entao a melhor distancia nunca piora. */
     int elite_count = ELITISM_COUNT;
     if (elite_count > next_pop->size)
     {
@@ -260,6 +272,7 @@ Population *evolve_population(const Population *current_pop, const Point *points
         }
         else
         {
+            /* Sem cruzamento o filho e copia do pai A (nunca ocorre com taxa 100%). */
             for (int point = 0; point < num_points; point++)
             {
                 next_pop->path[i].route[point] = parent_a->route[point];
@@ -277,6 +290,9 @@ Population *evolve_population(const Population *current_pop, const Point *points
     return next_pop;
 }
 
+/* Mutacao por inversao (2-opt aleatorio): com probabilidade `rate`, inverte
+   um trecho da rota. Diferente de trocar duas cidades, so muda as 2 arestas
+   das pontas, entao a rota mutada fica parecida com a original. */
 void inversion_mutation(int *route, int num_points, double rate)
 {
     if (route == NULL || num_points < 2 || rate <= 0.0)
@@ -313,6 +329,9 @@ void inversion_mutation(int *route, int num_points, double rate)
     }
 }
 
+/* Confere se a rota e uma permutacao de 0..N-1: todo indice no intervalo e
+   nenhum repetido. Usada nos testes para provar que os operadores nao
+   quebram a rota. */
 int route_is_valid(const int *route, int num_points)
 {
     if (route == NULL || num_points <= 0)

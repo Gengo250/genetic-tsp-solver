@@ -37,6 +37,8 @@ static void shuffle_route(int *route, int num_points)
     }
 }
 
+/* Cria a populacao inicial: cada individuo e uma permutacao aleatoria de
+   0..N-1. Comecar aleatorio da a maior diversidade possivel para o AG. */
 Population *population_create(int pop_size, int num_points)
 {
     if (pop_size < 1 || num_points < 1)
@@ -106,6 +108,7 @@ Population *population_create(int pop_size, int num_points)
     return pop;
 }
 
+/* Libera as 3 alocacoes feitas em population_create, na ordem inversa. */
 void population_free(Population *pop)
 {
     if (pop == NULL)
@@ -114,7 +117,7 @@ void population_free(Population *pop)
     }
 
     /* Um free libera todas as rotas. Usamos route_block, e nao path[0].route,
-       porque se `path` for reordenado (ex.: qsort na selecao por Ranking) o
+       porque se `path` for reordenado (ex.: com qsort) o
        path[0] passa a apontar para o meio do bloco, e free nesse endereco e
        comportamento indefinido. */
     free(pop->route_block);
@@ -123,6 +126,8 @@ void population_free(Population *pop)
 }
 
 
+/* Valida todas as rotas e so depois calcula distancia e fitness. Validar
+   antes evita ler points[] fora dos limites com uma rota corrompida. */
 int evaluate_population(Population *pop, const Point *points, int num_points)
 {
     if (pop == NULL || pop->path == NULL || points == NULL || pop->size <= 0 ||
@@ -145,6 +150,7 @@ int evaluate_population(Population *pop, const Point *points, int num_points)
             return 0;
         }
 
+        /* Reaproveita a mesma tabela para cada rota em vez de alocar de novo. */
         memset(seen, 0, (size_t)num_points * sizeof(*seen));
         for (int j = 0; j < num_points; j++)
         {
@@ -167,6 +173,8 @@ int evaluate_population(Population *pop, const Point *points, int num_points)
     return 1;
 }
 
+/* Comprimento total do ciclo: soma das distancias euclidianas entre cidades
+   vizinhas na rota. hypot() evita overflow intermediario de dx*dx + dy*dy. */
 double route_distance(const int *route, const Point *points, int num_points)
 {
     if (route == NULL || points == NULL || num_points < 2)
@@ -196,6 +204,7 @@ double route_distance(const int *route, const Point *points, int num_points)
     return total;
 }
 
+/* Calcula distancia e fitness = 1/distancia: rota mais curta, aptidao maior. */
 void individual_evaluate(Individual *ind, const Point *points, int num_points)
 {
     if (ind == NULL)
@@ -219,6 +228,7 @@ void individual_evaluate(Individual *ind, const Point *points, int num_points)
     }
 }
 
+/* Avalia todos sem validar as rotas (versao rapida de evaluate_population). */
 void population_evaluate_all(Population *pop, const Point *points)
 {
     if (pop == NULL || pop->path == NULL)
@@ -232,6 +242,7 @@ void population_evaluate_all(Population *pop, const Point *points)
     }
 }
 
+/* Busca linear pelo menor caminho: O(n), sem precisar ordenar a populacao. */
 const Individual *population_best(const Population *pop)
 {
     if (pop == NULL || pop->path == NULL || pop->size <= 0)
@@ -253,6 +264,8 @@ const Individual *population_best(const Population *pop)
     return best;
 }
 
+/* Copia profunda de um individuo (rota, distancia e fitness). Usada no
+   elitismo para levar o melhor para a proxima populacao. */
 void individual_copy(Individual *dst, const Individual *src, int num_points)
 {
     if (dst == NULL || src == NULL || dst == src || num_points < 1)

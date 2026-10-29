@@ -4,6 +4,8 @@
 #include "individual.h"
 #include "point.h"
 
+/* path: os individuos. route_block: bloco unico com todas as rotas; cada
+   path[i].route aponta para uma fatia dele (ver population_create). */
 typedef struct {
     Individual *path;
     int size;

@@ -247,11 +247,23 @@ typedef struct
     bool running;
     bool finished;
     const char *status;
+    double *history_distances;
+    int *history_routes;
+    int history_count;
+    int selected_generation;
+    int point_count;
 } Solver;
 
 static void solver_reset(Solver *solver)
 {
     population_free(solver->population);
+    free(solver->history_distances);
+    free(solver->history_routes);
+    solver->history_distances = NULL;
+    solver->history_routes = NULL;
+    solver->history_count = 0;
+    solver->selected_generation = 0;
+    solver->point_count = 0;
 
     solver->population = NULL;
     solver->generation = 0;
@@ -300,6 +312,19 @@ static bool solver_start(Solver *solver, const Point *points, int count)
 
     solver->best_distance = best->distance;
     solver->max_generations = max_generations_for(count);
+    const size_t capacity = (size_t)solver->max_generations + 1;
+    solver->history_distances = malloc(capacity * sizeof(*solver->history_distances));
+    solver->history_routes = malloc(capacity * (size_t)count * sizeof(*solver->history_routes));
+    if (solver->history_distances == NULL || solver->history_routes == NULL)
+    {
+        solver_reset(solver);
+        solver->status = "erro: sem memoria";
+        return false;
+    }
+    solver->point_count = count;
+    solver->history_distances[0] = best->distance;
+    memcpy(solver->history_routes, best->route, (size_t)count * sizeof(*best->route));
+    solver->history_count = 1;
     solver->resumed_at = GetTime();
     solver->running = true;
     solver->status = "evoluindo";
@@ -355,6 +380,11 @@ static void solver_step(Solver *solver, const Point *points, int count)
     solver->generation++;
 
     const Individual *best = population_best(solver->population);
+    solver->history_distances[solver->generation] = best->distance;
+    memcpy(solver->history_routes + (size_t)solver->generation * (size_t)count,
+           best->route, (size_t)count * sizeof(*best->route));
+    solver->history_count = solver->generation + 1;
+    solver->selected_generation = solver->generation;
 
     if (best->distance < solver->best_distance)
     {
@@ -376,6 +406,63 @@ static void solver_step(Solver *solver, const Point *points, int count)
     {
         solver_stop(solver, "limite de epocas");
     }
+}
+
+/* Historico completo: cada clique permite rever a rota da epoca correspondente. */
+static void draw_history_chart(Rectangle area, Solver *solver)
+{
+    DrawRectangleLinesEx(area, 1.0f, LIGHTGRAY);
+    draw_text("Evolucao da melhor distancia", area.x + 10, area.y + 8, 16, DARKBLUE);
+    if (solver->history_count == 0)
+    {
+        draw_text("Inicie a execucao para acompanhar as epocas.",
+                  area.x + 10, area.y + 38, 14, GRAY);
+        return;
+    }
+
+    const Rectangle plot = {area.x + 75, area.y + 38, area.width - 95, area.height - 68};
+    double minimum = solver->history_distances[0];
+    double maximum = minimum;
+    for (int i = 1; i < solver->history_count; i++)
+    {
+        if (solver->history_distances[i] < minimum) minimum = solver->history_distances[i];
+        if (solver->history_distances[i] > maximum) maximum = solver->history_distances[i];
+    }
+    double span = maximum - minimum;
+    if (span < 1e-9) span = 1.0;
+    for (int tick = 0; tick <= 2; tick++)
+    {
+        float y = plot.y + plot.height * (float)tick / 2.0f;
+        DrawLineV((Vector2){plot.x, y}, (Vector2){plot.x + plot.width, y}, LIGHTGRAY);
+        draw_text(TextFormat("%.1f", maximum - span * tick / 2.0), area.x + 5, y - 7, 12, GRAY);
+    }
+    const int last = solver->history_count - 1;
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(), plot))
+    {
+        float fraction = (GetMousePosition().x - plot.x) / plot.width;
+        solver_pause(solver);
+        solver->selected_generation = (int)roundf(fraction * (float)last);
+    }
+    for (int i = 1; i <= last; i++)
+    {
+        Vector2 a = {plot.x + plot.width * (float)(i - 1) / (float)last,
+                     plot.y + plot.height * (float)((maximum - solver->history_distances[i - 1]) / span)};
+        Vector2 b = {plot.x + plot.width * (float)i / (float)last,
+                     plot.y + plot.height * (float)((maximum - solver->history_distances[i]) / span)};
+        DrawLineEx(a, b, 2.0f, BLUE);
+    }
+    const int selected = solver->selected_generation;
+    float x = plot.x + (last ? plot.width * (float)selected / (float)last : 0);
+    float y = plot.y + plot.height * (float)((maximum - solver->history_distances[selected]) / span);
+    DrawLineV((Vector2){x, plot.y}, (Vector2){x, plot.y + plot.height}, MAROON);
+    DrawCircleV((Vector2){x, y}, 4, MAROON);
+    draw_text("0", plot.x, plot.y + plot.height + 5, 12, GRAY);
+    const char *end_label = TextFormat("Epoca %d", last);
+    draw_text(end_label, plot.x + plot.width - text_width(end_label, 12),
+              plot.y + plot.height + 5, 12, GRAY);
+    draw_text(TextFormat("Selecionada: %d | distancia: %.3f  (clique ou use as setas)",
+                         selected, solver->history_distances[selected]),
+              area.x + 10, area.y + area.height - 19, 12, DARKGRAY);
 }
 
 /* ------------------------------------------------------------- cenarios */
@@ -408,7 +495,9 @@ void run_gui(void)
 {
     srand(42);
 
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Genetic TSP Solver");
+    SetWindowMinSize(WINDOW_WIDTH, WINDOW_HEIGHT);
     SetTargetFPS(60);
 
     ui_font = load_ui_font();
@@ -417,7 +506,6 @@ void run_gui(void)
         SetTextureFilter(ui_font.texture, TEXTURE_FILTER_BILINEAR);
     }
 
-    const Rectangle view_area = {252.0f, 70.0f, 688.0f, 550.0f};
     const Rectangle count_box = {20.0f, 96.0f, 110.0f, 34.0f};
 
     int count = 20;
@@ -427,6 +515,7 @@ void run_gui(void)
     int steps_per_frame = 5;
 
     int point_count = count;
+    int point_scenario = scenario;
     Point *points = generate_points(scenario, count);
 
     Solver solver;
@@ -435,6 +524,24 @@ void run_gui(void)
 
     while (!WindowShouldClose())
     {
+        /* Alguns gerenciadores limitam a janela mesmo com tamanho minimo.
+           Reduz a interface inteira para manter os controles acessiveis. */
+        const float physical_width = (float)GetScreenWidth();
+        const float physical_height = (float)GetScreenHeight();
+        float ui_scale = fminf(1.0f, fminf(physical_width / WINDOW_WIDTH,
+                                             physical_height / WINDOW_HEIGHT));
+        if (ui_scale <= 0.0f) ui_scale = 1.0f;
+        SetMouseScale(1.0f / ui_scale, 1.0f / ui_scale);
+        const float screen_width = physical_width / ui_scale;
+        const float screen_height = physical_height / ui_scale;
+        const float content_height = screen_height - 110.0f;
+        const float chart_height = content_height * 0.36f;
+        const Rectangle view_area = {252.0f, 70.0f, screen_width - 272.0f,
+                                     content_height - chart_height - 12.0f};
+        const Rectangle chart_area = {view_area.x, view_area.y + view_area.height + 12.0f,
+                                      view_area.width, chart_height};
+        if (IsKeyPressed(KEY_F11)) ToggleBorderlessWindowed();
+
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         {
             if (CheckCollisionPointRec(GetMousePosition(), count_box))
@@ -503,6 +610,18 @@ void run_gui(void)
             }
         }
 
+        /* As setas permitem acessar cada epoca, inclusive quando ha mais
+           registros do que pixels disponiveis no grafico. */
+        if (!editing_count && solver.history_count > 0 &&
+            (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_RIGHT)))
+        {
+            solver_pause(&solver);
+            if (IsKeyPressed(KEY_LEFT) && solver.selected_generation > 0)
+                solver.selected_generation--;
+            if (IsKeyPressed(KEY_RIGHT) && solver.selected_generation < solver.history_count - 1)
+                solver.selected_generation++;
+        }
+
         /* Evolucao: roda antes do desenho para a tela mostrar a geracao atual. */
         if (solver.running && solver.population != NULL)
         {
@@ -514,9 +633,12 @@ void run_gui(void)
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
+        BeginMode2D((Camera2D){.zoom = ui_scale});
 
         draw_text("Genetic TSP Solver", 20.0f, 20.0f, 24.0f, DARKBLUE);
-        DrawLine(20, 58, WINDOW_WIDTH - 20, 58, LIGHTGRAY);
+        DrawLine(20, 58, (int)screen_width - 20, 58, LIGHTGRAY);
+        if (button((Rectangle){screen_width - 176, 17, 156, 32}, "Tela cheia (F11)", 13, true))
+            ToggleBorderlessWindowed();
 
         draw_text("Quantidade de pontos:", 20.0f, 72.0f, 16.0f, DARKGRAY);
 
@@ -579,6 +701,7 @@ void run_gui(void)
             free(points);
             points = generate_points(scenario, count);
             point_count = count;
+            point_scenario = scenario;
         }
 
         const bool has_points = (points != NULL && point_count >= MIN_POINTS);
@@ -645,7 +768,7 @@ void run_gui(void)
                       stats_x, stats_y, stats_size, DARKGRAY);
             stats_y += stats_step;
 
-            if (scenario == SCENARIO_CIRCLE)
+            if (point_scenario == SCENARIO_CIRCLE)
             {
                 const double optimum = circle_optimum(point_count);
 
@@ -680,28 +803,25 @@ void run_gui(void)
 
         const ViewTransform view = view_transform(view_area, points, point_count);
 
-        if (solver.population != NULL)
+        if (solver.history_count > 0)
         {
-            const Individual *best = population_best(solver.population);
-
-            if (best != NULL)
-            {
-                draw_route(&view, points, best->route, point_count);
-            }
+            const int *route = solver.history_routes +
+                (size_t)solver.selected_generation * (size_t)solver.point_count;
+            draw_route(&view, points, route, point_count);
         }
 
         draw_points(&view, points, point_count);
+        draw_text(TextFormat("%s | %d pontos | rota da epoca %d",
+                             point_scenario == SCENARIO_UNIFORM ? "uniforme" : "circulo",
+                             point_count, solver.selected_generation),
+                  view_area.x + 8.0f, view_area.y + 8.0f, 13.0f, DARKBLUE);
+        draw_history_chart(chart_area, &solver);
 
-        draw_text(TextFormat("%s | %d pontos | populacao %d | torneio k=%d | elitismo %d | mutacao %.0f%%",
-                             scenario == SCENARIO_UNIFORM ? "uniforme" : "circulo",
-                             point_count, population_size_for(point_count), TOURNAMENT_SIZE,
-                             ELITISM_COUNT, MUTATION_RATE_INITIAL * 100.0),
-                  view_area.x + 8.0f, view_area.y + view_area.height + 6.0f, 13.0f, GRAY);
-
+        EndMode2D();
         EndDrawing();
     }
 
-    population_free(solver.population);
+    solver_reset(&solver);
     free(points);
 
     if (ui_font_is_custom)

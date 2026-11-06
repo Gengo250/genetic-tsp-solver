@@ -397,6 +397,22 @@ continua legível. O CMake copia `resources/` para junto do binário no
 
 ---
 
+### Histórico gráfico por época
+
+A interface apresenta o mapa da rota e o gráfico da melhor distância por época
+para o cenário escolhido, uniforme ou circular. O histórico inclui a população
+inicial (época 0) e guarda uma cópia da melhor rota e a distância em cada época,
+mesmo quando várias épocas são processadas no mesmo quadro. Clique no gráfico
+para pausar e consultar a rota correspondente; as setas esquerda e direita
+permitem avançar época por época, e `Continuar` retoma a execução.
+`Resetar` e `Gerar pontos` descartam o histórico da execução anterior. A seleção
+de cenário passa a valer para o mapa quando se clica em `Gerar pontos`.
+
+A janela pode ser redimensionada; o botão `Tela cheia (F11)` alterna o modo de
+tela cheia sem bordas. Os gráficos usam a própria Raylib e não exigem Python.
+
+---
+
 ### Etapa 3 — Relatório de desempenho 🔲 PENDENTE
 **Objetivo:** Gerar saída formatada comparando cenário uniforme vs circular,
 com tabela de distância por época para apresentação.
